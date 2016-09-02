@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<root>
-  <item name="broker" value="0228" /> 
-  <item name="oms" value="tcp://180.169.40.106:18888" /> 
-  <item name="md" value="tcp://180.169.40.106:16666" /> 
-</root>
-

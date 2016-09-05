@@ -83,8 +83,6 @@ void USTPLoginDialog::paintEvent(QPaintEvent *event)
 
 void USTPLoginDialog::doUserLogin()
 {	
-	accept();
-	return;
 	mUserId = mUserEdit->text();
 	mPassword = mPasswordEdit->text();
 	if ((!mUserId.isEmpty()) && (!mPassword.isEmpty())){

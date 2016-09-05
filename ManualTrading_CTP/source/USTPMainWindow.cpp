@@ -14,9 +14,9 @@ USTPMainWindow::USTPMainWindow(QWidget * parent)
 : QMainWindow(parent)
 {	
 	mTabIndex = -1;
-	//mBrokerId = USTPCtpLoader::getBrokerId();
-	//mUserId = USTPMutexId::getUserId();
-	//mPsw = USTPMutexId::getLoginPsw();
+	mBrokerId = USTPCtpLoader::getBrokerId();
+	mUserId = USTPMutexId::getUserId();
+	mPsw = USTPMutexId::getLoginPsw();
 	createPic();
 	createActions();
 	createMenus();
@@ -41,7 +41,7 @@ USTPMainWindow::USTPMainWindow(QWidget * parent)
 	for(int actionIndex = 0; actionIndex < actionList.size(); actionIndex++){
 		QString itemAction = actionList.at(actionIndex);
 		QStringList actionItem = itemAction.split(":");
-	//	USTPMutexId::initActionNum(actionItem.at(0), actionItem.at(1).toInt());
+		USTPMutexId::initActionNum(actionItem.at(0), actionItem.at(1).toInt());
 	}
 	USTPProfile::readItem(tr("[KeyItem]"), key);
 	QStringList keyList = key.split("|");
@@ -69,7 +69,7 @@ USTPMainWindow::USTPMainWindow(QWidget * parent)
 	QDesktopWidget *pDesk = QApplication::desktop();
 	resize(pDesk->width() / 2, pDesk->height());
 	move(0, 0);
-	//doQryInvestorPosition();
+	doQryInvestorPosition();
 }
 
 USTPMainWindow::~USTPMainWindow()

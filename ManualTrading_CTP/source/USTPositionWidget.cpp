@@ -8,8 +8,8 @@ USTPositionWidget::USTPositionWidget(QWidget* parent)
 :QTreeWidget(parent)
 {	
 	mHeaders << POSITION_WIDGET_TAB_HEAD_0 << POSITION_WIDGET_TAB_HEAD_1 << POSITION_WIDGET_TAB_HEAD_2;
-	//USTPMutexId::getTotalBidPosition(mBidPositions);
-	//USTPMutexId::getTotalAskPosition(mAskPositions);
+	USTPMutexId::getTotalBidPosition(mBidPositions);
+	USTPMutexId::getTotalAskPosition(mAskPositions);
 	setHeaderLabels(mHeaders);
 	setSelectionBehavior(QAbstractItemView::SelectRows);
 	setAlternatingRowColors(true);

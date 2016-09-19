@@ -111,17 +111,27 @@ QString USTPOrderWidget::getStatusText(const char& status)
 		rtnStatus = QString(tr("录入错误"));
 	}else if (status == 'Z'){
 		rtnStatus = QString(tr("资金不足"));
+	}else if (status == 'R'){
+		rtnStatus = QString(tr("预埋未发送"));
+	}else if (status == 'X'){
+		rtnStatus = QString(tr("预埋已发送"));
+	}else if (status == 'Y'){
+		rtnStatus = QString(tr("预埋已删除"));
+	}else if (status == 'H'){
+		rtnStatus = QString(tr("CTP: 无此权限"));
+	}else if (status == 'K'){
+		rtnStatus = QString(tr("CTP: 连续交易状态"));
 	}
 	return rtnStatus;
 }
 
 
 void USTPOrderWidget::doUpdateOrderShow(const QString& orderLabel, const QString& requestId, const QString& instrumentId, const char& status, const char& bs, const int&
-					   orderVolume, const int& remainVolume, const int& tradeVolume, const char& offsetFlag, const char& priceType, const char& hedge, const double& orderPrice)
+										orderVolume, const int& remainVolume, const int& tradeVolume, const char& offsetFlag, const char& priceType, const char& hedge, const double& orderPrice)
 {	
 	QList<QTableWidgetItem*> itemList = findItems(requestId, Qt::MatchRecursive);
 	if (itemList.size() == 0){
-		if(status == THOST_FTDC_OST_AllTraded || status == THOST_FTDC_OST_Canceled)
+		if(status == THOST_FTDC_OST_AllTraded || status == THOST_FTDC_OST_Canceled || status == 'Y')
 			return;
 		setSortingEnabled(false);
 		int nRow = rowCount();	
@@ -145,7 +155,7 @@ void USTPOrderWidget::doUpdateOrderShow(const QString& orderLabel, const QString
 		QTableWidgetItem* it = itemList.at(0);
 		int nSelRow = it->row();
 		int nColumeLen = columnCount();
-		if(status == THOST_FTDC_OST_AllTraded || status == THOST_FTDC_OST_Canceled){
+		if(status == THOST_FTDC_OST_AllTraded || status == THOST_FTDC_OST_Canceled || status == 'Y'){
 			for(int nIndex = 0; nIndex < nColumeLen; nIndex++){
 				QTableWidgetItem* showItem = takeItem(nSelRow, nIndex);
 				delete showItem;

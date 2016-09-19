@@ -60,7 +60,7 @@ void USTPCancelWidget::doUpdateOrderShow(const QString& orderLabel, const QStrin
 {	
 	QList<QTableWidgetItem*> itemList = findItems(orderLabel, Qt::MatchRecursive);
 	if (itemList.size() == 0){
-		if(status == THOST_FTDC_OST_AllTraded || status == THOST_FTDC_OST_Canceled)
+		if(status == THOST_FTDC_OST_AllTraded || status == THOST_FTDC_OST_Canceled || status == 'Y')
 			return;
 		setSortingEnabled(false);
 		int nRow = rowCount();	
@@ -84,7 +84,7 @@ void USTPCancelWidget::doUpdateOrderShow(const QString& orderLabel, const QStrin
 		QTableWidgetItem* it = itemList.at(0);
 		int nSelRow = it->row();
 		int nColumeLen = columnCount();
-		if(status == THOST_FTDC_OST_AllTraded || status == THOST_FTDC_OST_Canceled){
+		if(status == THOST_FTDC_OST_AllTraded || status == THOST_FTDC_OST_Canceled || status == 'Y'){
 			for(int nIndex = 0; nIndex < nColumeLen; nIndex++){
 				QTableWidgetItem* showItem = takeItem(nSelRow, nIndex);
 				delete showItem;

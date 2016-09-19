@@ -39,7 +39,7 @@ USTPSubmitWidget::USTPSubmitWidget(const int& bKey, const int& sKey, USTPOrderWi
 	mOffsetComboBox->setItemIcon(1, QIcon("../image/green.png"));
 	mOffsetComboBox->setItemIcon(2, QIcon("../image/green.png"));
 	mOffsetComboBox->setItemIcon(3, QIcon("../image/green.png"));
-	mOffsetComboBox->setCurrentIndex(2);
+	mOffsetComboBox->setCurrentIndex(0);
 	mOffsetFlagLabel->setBuddy(mOffsetComboBox);
 	
 	mVolumeLabel = new QLabel(tr("委托数量"));
@@ -57,7 +57,9 @@ USTPSubmitWidget::USTPSubmitWidget(const int& bKey, const int& sKey, USTPOrderWi
 	mPriceLabel->setBuddy(mPriceSpinBox);
 
 
-	mConfirmBtn = createButton(tr("提 交"), SLOT(createOrder()));
+	mConfirmBtn = createButton(tr("委托报单"), SLOT(createOrder()));
+	mParkedOrderBtn = createButton(tr("预埋报单"), SLOT(createParkedOrder()));
+	mParkedCancelBtn = createButton(tr("删除预埋"), SLOT(createParkedCancel()));
 	QLabel* pNullLabel = new QLabel;
 	mGridLayout = new QGridLayout;
 	mGridLayout->addWidget(mInsLabel, 0, 1, 1, 1);	
@@ -73,7 +75,9 @@ USTPSubmitWidget::USTPSubmitWidget(const int& bKey, const int& sKey, USTPOrderWi
 	mGridLayout->addWidget(mVolumeSpinBox, 1, 4, 1, 1);
 	mGridLayout->addWidget(mPriceSpinBox, 1, 5, 1, 1);
 	mGridLayout->addWidget(mConfirmBtn, 1, 6, 1, 1);
-	mGridLayout->addWidget(pNullLabel, 2, 0, 4, 7);
+	mGridLayout->addWidget(mParkedOrderBtn, 2, 5, 1, 1);
+	mGridLayout->addWidget(mParkedCancelBtn, 2, 6, 1, 1);
+	mGridLayout->addWidget(pNullLabel, 3, 0, 3, 7);
 	setLayout(mGridLayout);
 	initConnect(pMarketWidget, parent);
 }
@@ -117,7 +121,7 @@ void USTPSubmitWidget::createOrder()
 	QString insId = mInsLineEdit->text();
 	if(insId == "")
 		return;
-	QString label = tr("[K交易]") + QString::number(USTPMutexId::getNewOrderIndex());
+	QString label = tr("[CTP交易]") + QString::number(USTPMutexId::getNewOrderIndex());
 	QStringList bsItems = mBSComboBox->currentText().split("-");
 	char direction = (bsItems.at(0) == tr("0")) ? THOST_FTDC_D_Buy : THOST_FTDC_D_Sell;
 
@@ -150,6 +154,52 @@ void USTPSubmitWidget::createOrder()
 	else
 		speLabel = insId + tr("_S");
 	emit onSubmitOrder(label, speLabel, insId, direction, offstFlag, qty, price);
+}
+
+void USTPSubmitWidget::createParkedOrder()
+{
+	QString insId = mInsLineEdit->text();
+	if(insId == "")
+		return;
+	QString label = tr("[CTP预埋]") + QString::number(USTPMutexId::getNewOrderIndex());
+	QStringList bsItems = mBSComboBox->currentText().split("-");
+	char direction = (bsItems.at(0) == tr("0")) ? THOST_FTDC_D_Buy : THOST_FTDC_D_Sell;
+
+	QStringList offsetItems = mOffsetComboBox->currentText().split("-");
+	int selOffsetFlag = offsetItems.at(0).toInt();
+	char offstFlag;
+	switch (selOffsetFlag)
+	{
+	case 0:
+		offstFlag = THOST_FTDC_OF_Open;
+		break;
+	case 1:
+		offstFlag = THOST_FTDC_OF_Close;
+		break;
+	case 2:
+		offstFlag = THOST_FTDC_OF_CloseToday;
+		break;
+	case 3:
+		offstFlag = THOST_FTDC_OF_CloseYesterday;
+		break;
+	default:
+		offstFlag = THOST_FTDC_OF_Open;
+		break;
+	}
+	int qty = mVolumeSpinBox->value();
+	double price = mPriceSpinBox->value();
+	QString speLabel;
+	if(THOST_FTDC_D_Buy == direction)
+		speLabel = insId + tr("_B");
+	else
+		speLabel = insId + tr("_S");
+	emit onSubmitParkedOrder(label, speLabel, insId, direction, offstFlag, qty, price);
+}
+
+
+void USTPSubmitWidget::createParkedCancel()
+{
+	emit onCancelParkedOrder();
 }
 
 void USTPSubmitWidget::doUpdateKey(const int& bidKey, const int& askKey)
@@ -248,7 +298,7 @@ void USTPSubmitWidget::doKeyDownHock(const int& key)
 void USTPSubmitWidget::doEnbedOrder(const QString& selIns, const QString& direction, const QString& offsetFlag, const double& priceTick, const int& orderQty,
 									const int& openSuperPrice, const int& stopProfitNum, const int& stopLossNum, const double& bidPrice, const double& askPrice, const double& lastPrice)
 {
-	QString label = tr("[K交易]") + QString::number(USTPMutexId::getNewOrderIndex());
+	QString label = tr("[CTP交易]") + QString::number(USTPMutexId::getNewOrderIndex());
 	QStringList bsItems = direction.split("-");
 	char bs = (bsItems.at(0) == tr("0")) ? THOST_FTDC_D_Buy : THOST_FTDC_D_Sell;
 	QStringList offsetItems = offsetFlag.split("-");

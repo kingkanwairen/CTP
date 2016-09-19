@@ -56,6 +56,14 @@ bool USTPStrategyBase::isInMarket(const char& status)
 	return false;
 }
 
+bool USTPStrategyBase::isInParkedMarket(const char& status)
+{
+	if (THOST_FTDC_PAOS_NotSend == status || THOST_FTDC_PAOS_Send == status){
+			return true;
+	}
+	return false;
+}
+
 int USTPStrategyBase::getInsPrcision(const double& value)
 {
 	if (value >= VALUE_1){
@@ -80,8 +88,11 @@ USTPSpeculateOrder::USTPSpeculateOrder(const QString& orderLabel, const QString&
 	mStrategyThread.start();
 	mTempOrderQty = 0;
 	mTempOrderPrice = 0.0;
+	mFirstReqestId = 0;
+	mIsParkedOrder = false;
 	mSpeOrderLabel = speOrderLabel;
 	mFirstInsStatus = USTP_FTDC_OS_ORDER_NO_ORDER;
+	mFirstInsParkedStatus = USTP_FTDC_OS_ORDER_NO_ORDER;
 	initConnect(pSubmitWidget, pOrderWidget, pCancelWidget);
 }
 
@@ -95,6 +106,12 @@ void USTPSpeculateOrder::initConnect(USTPSubmitWidget* pSubmitWidget, USTPOrderW
 {
 	connect(pSubmitWidget, SIGNAL(onSubmitOrder(const QString&, const QString&, const QString&, const char&, const char&, const int&, const double&)), 
 		this, SLOT(doSubmitOrder(const QString&, const QString&, const QString&, const char&, const char&, const int&, const double&)), Qt::QueuedConnection);
+
+	connect(pSubmitWidget, SIGNAL(onSubmitParkedOrder(const QString&, const QString&, const QString&, const char&, const char&, const int&, const double&)), 
+		this, SLOT(doSubmitParkedOrder(const QString&, const QString&, const QString&, const char&, const char&, const int&, const double&)), Qt::QueuedConnection);
+
+	connect(pSubmitWidget, SIGNAL(onCancelParkedOrder()), this, SLOT(doCancelParkedOrder()), Qt::QueuedConnection);
+	
 
 	connect(USTPCtpLoader::getTradeSpi(), SIGNAL(onUSTPRtnOrder(const QString&, const QString&, const QString&, const char&, const double&, const int&, const int&, const int&, const char&, const char&, const char&, const char&,
 		const QString&, const QString&, const QString&, const QString&, const QString&, const char&, const int&)),
@@ -115,6 +132,23 @@ void USTPSpeculateOrder::initConnect(USTPSubmitWidget* pSubmitWidget, USTPOrderW
 		const char&, const char&, const QString&, const QString&, const QString&, const QString&, const QString&, const QString&, const QString&)),
 		this, SLOT(doUSTPRtnTrade(const QString&, const QString&, const char&, const int&, const double&,
 		const char&, const char&, const QString&, const QString&, const QString&, const QString&, const QString&, const QString&, const QString&)), Qt::QueuedConnection);
+
+	connect(USTPCtpLoader::getTradeSpi(), SIGNAL(onUSTPRemoveParkedOrder(const QString&, const QString&, const QString&)),
+		this, SLOT(doUSTPRemoveParkedOrder(const QString&, const QString&, const QString&)), Qt::QueuedConnection);
+
+	connect(USTPCtpLoader::getTradeSpi(), SIGNAL(onUSTPParkedOrderInsert(const QString&, const QString&, const QString&, const char&, const double&, const int&,
+		const int&, const int&, const char&, const char&, const char&, const char&,
+		const QString&, const QString&, const QString&, const QString&, const QString&, const char&, const int&, const int&)),
+		this, SLOT(doUSTPParkedOrderInsert(const QString&, const QString&, const QString&, const char&, const double&, const int&,
+		const int&, const int&, const char&, const char&, const char&, const char&,
+		const QString&, const QString&, const QString&, const QString&, const QString&, const char&, const int&, const int&)), Qt::QueuedConnection);
+
+	connect(USTPCtpLoader::getTradeSpi(), SIGNAL(onUSTPParkedOrderAction(const QString&, const QString&, const QString&, const double&, const char&,
+		const QString&, const QString&, const QString&, const QString&, const QString&, const int&, const int&)),
+		this, SLOT(doUSTPParkedOrderAction(const QString&, const QString&, const QString&, const double&, const char&,
+		const QString&, const QString&, const QString&, const QString&, const QString&, const int&, const int&)), Qt::QueuedConnection);
+
+
 
 	connect(this, SIGNAL(onUpdateOrderShow(const QString&, const QString&, const QString&, const char&, const char&, const int&, const int&, const int&, const char&, const char&, const char&, const double&)), 
 		pOrderWidget, SLOT(doUpdateOrderShow(const QString&, const QString&, const QString&, const char&, const char&, const int&, const int&, const int&, const char&, const char&, const char&, const double&)), Qt::QueuedConnection);
@@ -139,7 +173,8 @@ void USTPSpeculateOrder::doSubmitOrder(const QString& orderLabel, const QString&
 		mTempOrderQty = volume;
 		mTempOrderPrice = orderPrice;
 		mFirstInsStatus = USTP_FTDC_OS_CANCEL_SUBMIT;
-		submitAction(mFirstOrderRef, mInstrumentId);
+		QString orderRef = mReqMap[mFirstReqestId];
+		submitAction(orderRef, mInstrumentId);
 
 	}else if(USTP_FTDC_OS_ORDER_NO_ORDER == mFirstInsStatus || THOST_FTDC_OST_Canceled == mFirstInsStatus){
 		mOrderLabel = orderLabel;
@@ -149,9 +184,90 @@ void USTPSpeculateOrder::doSubmitOrder(const QString& orderLabel, const QString&
 		mOrderQty = volume;
 		mOrderPrice = orderPrice;
 		mRemainQty = volume;
+		mIsParkedOrder = false;
 		submitOrder(ins, orderPrice, direction, volume, THOST_FTDC_OPT_LimitPrice, THOST_FTDC_TC_GFD);
 	}
 }
+
+void USTPSpeculateOrder::doSubmitParkedOrder(const QString& orderLabel, const QString& speLabel, const QString& ins, const char& direction, const char& offsetFlag, const int& volume, const double& orderPrice)
+{	
+	if(mSpeOrderLabel != speLabel)
+		return;
+	if(USTPStrategyBase::isInParkedMarket(mFirstInsParkedStatus)){
+		mTempOrderLabel = orderLabel;
+		mTempOffsetFlag = offsetFlag;
+		mTempBS = direction;
+		mTempFirstIns = ins;
+		mTempOrderQty = volume;
+		mTempOrderPrice = orderPrice;
+		mFirstInsParkedStatus = USTP_FTDC_OS_CANCEL_SUBMIT;
+		QString orderRef = mReqMap[mFirstReqestId];
+		submitParkedCancel(orderRef);
+
+	}else if(USTP_FTDC_OS_ORDER_NO_ORDER == mFirstInsParkedStatus || THOST_FTDC_PAOS_Deleted == mFirstInsParkedStatus){
+		mOrderLabel = orderLabel;
+		mOffsetFlag = offsetFlag;
+		mBS = direction;
+		mInstrumentId = ins;
+		mOrderQty = volume;
+		mOrderPrice = orderPrice;
+		mRemainQty = volume;
+		mIsParkedOrder = true;
+		submitParkedOrder(ins, orderPrice, direction, volume, THOST_FTDC_OPT_LimitPrice, THOST_FTDC_TC_GFD);
+	}
+}
+
+
+void USTPSpeculateOrder::submitParkedOrder(const QString& instrumentId, const double& orderPrice, const char& direction, const int& qty, const char& priceType, const char& timeCondition)
+{	
+	double adjustPrice = (priceType == THOST_FTDC_OPT_LimitPrice) ? orderPrice : 0.0;
+	QString orderRef;
+	mFirstInsParkedStatus = USTP_FTDC_OS_ORDER_SUBMIT;
+	int reqId = USTPMutexId::getMutexId();
+	USTPTradeApi::reqParkedOrderInsert(reqId, orderRef, mBrokerId, mUserId, mInvestorId, instrumentId, priceType, timeCondition, adjustPrice, qty, direction, mOffsetFlag, THOST_FTDC_HF_Speculation, THOST_FTDC_VC_AV);
+	mFirstReqestId = reqId;
+	QString szReqId = QString::number(reqId);
+	mReqMap.insert(reqId, orderRef);
+	emit onUpdateOrderShow(mOrderLabel, szReqId, instrumentId, 'N', direction, qty, qty, 0, mOffsetFlag, priceType, THOST_FTDC_HF_Speculation, adjustPrice);
+#ifdef _DEBUG
+	QString data = mOrderLabel + tr("  [ParkedOrder] Instrument: ") + instrumentId +  tr("  RequestId: ") + szReqId + tr("  OrderRef: ") + orderRef + 
+		tr("  UserId: ") + mUserId + tr("  PriceType: ") + QString(priceType) + tr("  OrderPrice: ") + QString::number(adjustPrice) + tr("  OrderVolume: ") + 
+		QString::number(qty) + tr("  Direction: ") + QString(direction) + tr("  OffsetFlag: ") + QString(mOffsetFlag);
+	USTPLogger::saveData(data);
+#endif	
+}
+
+void USTPSpeculateOrder::submitParkedAction(const QString& orderRef, const QString& instrumentId)
+{	
+	int reqId = USTPMutexId::getMutexId();
+	USTPTradeApi::reqParkedOrderAction(reqId, mBrokerId, mUserId, mInvestorId, instrumentId, orderRef, mFrontId, mSessionId);
+	mReqMap.insert(reqId, orderRef);
+#ifdef _DEBUG
+	QString data = mOrderLabel + tr("  [ParkedAction] OrderRef: ") + orderRef + tr("  InstrumentId: ") + instrumentId;
+	USTPLogger::saveData(data);
+#endif	
+}
+
+void USTPSpeculateOrder::doCancelParkedOrder()
+{
+	foreach (QString key, mParkedOrderMap.keys()){
+		submitParkedCancel(key);
+	}
+}
+
+
+void USTPSpeculateOrder::submitParkedCancel(const QString& parkedOrderId)
+{	
+	mFirstInsParkedStatus = USTP_FTDC_OS_ORDER_SUBMIT;
+	int reqId = USTPMutexId::getMutexId();
+	mReqMap.insert(reqId, parkedOrderId);
+	USTPTradeApi::reqParkedOrderCancel(reqId, mBrokerId,  mInvestorId, parkedOrderId);
+#ifdef _DEBUG
+	QString data = mOrderLabel + tr("  [ParkedCancel] UserId: ") + mInvestorId + tr("  ParkedOrderId: ") + parkedOrderId;
+	USTPLogger::saveData(data);
+#endif	
+}
+
 
 void USTPSpeculateOrder::submitOrder(const QString& instrumentId, const double& orderPrice, const char& direction, const int& qty, const char& priceType, const char& timeCondition)
 {	
@@ -165,9 +281,9 @@ void USTPSpeculateOrder::orderInsert(const int& reqId, const QString& instrument
 	QString orderRef;
 	mFirstInsStatus = USTP_FTDC_OS_ORDER_SUBMIT;
 	USTPTradeApi::reqOrderInsert(reqId, orderRef, mBrokerId, mUserId, mInvestorId, instrumentId, priceType, timeCondition, adjustPrice, qty, direction, mOffsetFlag, THOST_FTDC_HF_Speculation, THOST_FTDC_VC_AV);
-	mFirstOrderRef = orderRef;
+	mFirstReqestId = reqId;
 	QString szReqId = QString::number(reqId);
-	mReqMap.insert(orderRef, szReqId);
+	mReqMap.insert(reqId, orderRef);
 	emit onUpdateOrderShow(mOrderLabel, szReqId, instrumentId, 'N', direction, qty, qty, 0, mOffsetFlag, priceType, THOST_FTDC_HF_Speculation, mOrderPrice);
 #ifdef _DEBUG
 	QString data = mOrderLabel + tr("  [OrderInsert] Instrument: ") + instrumentId +  tr("  RequestId: ") + szReqId + tr("  OrderRef: ") + orderRef + 
@@ -181,10 +297,16 @@ void USTPSpeculateOrder::doUSTPRtnOrder(const QString& localId, const QString& o
 											 const int& remainVolume, const int& tradeVolume, const char& offsetFlag, const char& priceType, const char& hedgeFlag, const char& orderStatus,
 											 const QString& brokerId, const QString& exchangeId, const QString& investorId, const QString& orderSysId, const QString& statusMsg, const char& timeCondition, const int& reqId)
 {	
-	if(mReqMap.find(orderRef) == mReqMap.end())
+	if(mReqMap.find(reqId) == mReqMap.end())
 		return;
-	emit onUpdateOrderShow(mOrderLabel, mReqMap[orderRef], instrumentId, orderStatus, direction, orderVolume, remainVolume, tradeVolume, offsetFlag, priceType, hedgeFlag, orderPrice);
-	if(mFirstOrderRef == orderRef){
+	if(mIsParkedOrder){
+		mFirstInsParkedStatus = USTP_FTDC_OS_ORDER_NO_ORDER;
+		mOrderSysId = orderSysId;
+		mActionExh = exchangeId;
+	}
+	QString szReqId = QString::number(reqId);
+	emit onUpdateOrderShow(mOrderLabel, szReqId, instrumentId, orderStatus, direction, orderVolume, remainVolume, tradeVolume, offsetFlag, priceType, hedgeFlag, orderPrice);
+	if(mFirstReqestId == reqId){
 		mFirstInsStatus = orderStatus;
 		mRemainQty = remainVolume;
 		if (THOST_FTDC_OST_Canceled == orderStatus){
@@ -211,32 +333,33 @@ void USTPSpeculateOrder::doUSTPErrRtnOrderInsert(const QString& userId, const QS
 													  const QString& instrumentId, const QString& investorId, const char& offsetFlag, const char& priceType, const char& timeCondition,
 													  const QString& orderRef, const double& orderPrice, const int& volume, const int& errorId, const QString& errorMsg, const int& reqId)
 {	
-	if(mReqMap.find(orderRef) == mReqMap.end())
+	if(mReqMap.find(reqId) == mReqMap.end())
 		return;
 
 	if(mInstrumentId == instrumentId)
 		mFirstInsStatus = USTP_FTDC_OS_ORDER_ERROR;
+	QString szReqId = QString::number(reqId);
 
 	switch (errorId){
 	case 22:
-		emit onUpdateOrderShow(mOrderLabel, mReqMap[orderRef], instrumentId, 'D', direction, volume, volume, 0, offsetFlag, priceType, hedgeFlag, mOrderPrice); //重复的报单
+		emit onUpdateOrderShow(mOrderLabel, szReqId, instrumentId, 'D', direction, volume, volume, 0, offsetFlag, priceType, hedgeFlag, orderPrice); //重复的报单
 		break;
 	case 31:
-		emit onUpdateOrderShow(mOrderLabel, mReqMap[orderRef], instrumentId, 'Z', direction, volume, volume, 0, offsetFlag, priceType, hedgeFlag, mOrderPrice);	//	资金不足
+		emit onUpdateOrderShow(mOrderLabel, szReqId, instrumentId, 'Z', direction, volume, volume, 0, offsetFlag, priceType, hedgeFlag, orderPrice);	//	资金不足
 		break;
 	case 42:
-		emit onUpdateOrderShow(mOrderLabel, mReqMap[orderRef], instrumentId, 'S', direction, volume, volume, 0, offsetFlag, priceType, hedgeFlag, mOrderPrice);	//	结算结果未确认
+		emit onUpdateOrderShow(mOrderLabel, szReqId, instrumentId, 'S', direction, volume, volume, 0, offsetFlag, priceType, hedgeFlag, orderPrice);	//	结算结果未确认
 		break;
 	case 50:
 	case 51:
-		emit onUpdateOrderShow(mOrderLabel, mReqMap[orderRef], instrumentId, 'P', direction, volume, volume, 0, offsetFlag, priceType, hedgeFlag, mOrderPrice);	//平仓位不足
+		emit onUpdateOrderShow(mOrderLabel, szReqId, instrumentId, 'P', direction, volume, volume, 0, offsetFlag, priceType, hedgeFlag, orderPrice);	//平仓位不足
 		break;
 	default:
-		emit onUpdateOrderShow(mOrderLabel, mReqMap[orderRef], instrumentId, 'W', direction, volume, volume, 0, offsetFlag, priceType, hedgeFlag, mOrderPrice);
+		emit onUpdateOrderShow(mOrderLabel, szReqId, instrumentId, 'W', direction, volume, volume, 0, offsetFlag, priceType, hedgeFlag, orderPrice);
 		break;
 	}
 #ifdef _DEBUG
-	QString data = mOrderLabel + tr("  [ErrRtnOrderInsert] orderRef: ") + orderRef + tr("  RequestId: ") + mReqMap[orderRef] + tr("  InstrumentId: ") + instrumentId + 
+	QString data = mOrderLabel + tr("  [ErrRtnOrderInsert] orderRef: ") + orderRef + tr("  RequestId: ") + szReqId + tr("  InstrumentId: ") + instrumentId + 
 		tr("  ErrorId: ") + QString::number(errorId) + tr("  ErrorMsg: ") + errorMsg;
 	USTPLogger::saveData(data);
 #endif
@@ -247,10 +370,25 @@ void USTPSpeculateOrder::doUSTPErrRtnOrderAction(const char& actionFlag, const Q
 													  const int& volumeChange, const int& errorId, const QString& errorMsg, const int& reqId)
 {
 #ifdef _DEBUG
-	if(mReqMap.find(orderActionRef) == mReqMap.end())
+	if(mReqMap.find(reqId) == mReqMap.end())
 		return;
-	QString data = mOrderLabel + tr("  [ErrRtnOrderAction] orderSysId: ") + orderSysId + tr("  UserActionLocalId: ") + userActionLocalId  + tr("  ErrorId: ") + 
-		QString::number(errorId) + tr("  ErrorMsg: ") + errorMsg;
+	QString data = mOrderLabel + tr("  [ErrRtnOrderAction] orderSysId: ") + orderSysId + tr("  UserActionLocalId: ") + userActionLocalId  + tr("  OrderRef: ") + orderActionRef  +
+		tr("  ErrorId: ") + QString::number(errorId) + tr("  ErrorMsg: ") + errorMsg;
+	USTPLogger::saveData(data);
+#endif
+}
+
+void USTPSpeculateOrder::doUSTPRemoveParkedOrder(const QString& brokerId, const QString& userId, const QString& parkedOrderId)
+{
+	if(mParkedOrderMap.find(parkedOrderId) == mParkedOrderMap.end())
+		return;
+	QString reqId = mParkedOrderMap[parkedOrderId];
+	emit onUpdateOrderShow(parkedOrderId, reqId, "", THOST_FTDC_OST_Canceled, '2', 0, 0, 0, '5', '0', '0', 0.0);
+	emit onOrderFinished(mOrderLabel, mInstrumentId);
+	mFirstInsParkedStatus = USTP_FTDC_OS_ORDER_NO_ORDER;
+	mParkedOrderMap.remove(parkedOrderId);
+#ifdef _DEBUG
+	QString data = mOrderLabel + tr("  [RtnRemoveParkedOrder] BrokerId: ") + brokerId + tr("  UserId: ") + userId  + tr("  ParkedOrderId: ") + parkedOrderId;
 	USTPLogger::saveData(data);
 #endif
 }
@@ -258,28 +396,143 @@ void USTPSpeculateOrder::doUSTPErrRtnOrderAction(const char& actionFlag, const Q
 void USTPSpeculateOrder::doDelOrder(const QString& orderLabel)
 {
 	if(orderLabel == mOrderLabel){
-		if(isInMarket(mFirstInsStatus)){
-			mTempOrderLabel = "";
-			mFirstInsStatus = USTP_FTDC_OS_CANCEL_SUBMIT;
-			submitAction(mFirstOrderRef, mInstrumentId);
-		}else if(USTP_FTDC_OS_ORDER_NO_ORDER == mFirstInsStatus || USTP_FTDC_OS_ORDER_ERROR == mFirstInsStatus || THOST_FTDC_OST_Canceled == mFirstInsStatus){
-			emit onUpdateOrderShow(mOrderLabel, mReqMap[mFirstOrderRef], mInstrumentId, THOST_FTDC_OST_Canceled, mBS, mOrderQty, mOrderQty, 0, mOffsetFlag, 
+		if(mIsParkedOrder)
+			parkedAction();
+		else
+			continueAction();
+	}
+}
+
+void USTPSpeculateOrder::parkedAction()
+{
+	if(isInMarket(mFirstInsStatus)){
+		mTempOrderLabel = "";
+		char temStatus = mFirstInsStatus;
+		mFirstInsStatus = USTP_FTDC_OS_CANCEL_SUBMIT;
+		int reqestId = USTPMutexId::getMutexId();
+		USTPTradeApi::reqOrderSysAction(reqestId, mBrokerId, mUserId, mInvestorId, mInstrumentId, mOrderSysId, mActionExh);
+		mReqMap.insert(reqestId, mOrderSysId);
+
+	}else if(USTP_FTDC_OS_ORDER_NO_ORDER == mFirstInsStatus || USTP_FTDC_OS_ORDER_ERROR == mFirstInsStatus || THOST_FTDC_OST_Canceled == mFirstInsStatus){
+		QString szRequestId = QString::number(mFirstReqestId);
+		emit onUpdateOrderShow(mOrderLabel, szRequestId, mInstrumentId, THOST_FTDC_OST_Canceled, mBS, mOrderQty, mOrderQty, 0, mOffsetFlag, 
+			THOST_FTDC_OPT_LimitPrice, THOST_FTDC_HF_Speculation, mOrderPrice);
+		emit onOrderFinished(mOrderLabel, mInstrumentId);
+		mFirstInsStatus = USTP_FTDC_OS_ORDER_NO_ORDER;
+	}
+	
+	QString data = mOrderLabel + tr("  [DoDelParkedOrder] ParkedStatus: ") + QString(mFirstInsParkedStatus) + tr("  ContinueStatus: ") +  QString(mFirstInsStatus);
+	USTPLogger::saveData(data);
+}
+
+void USTPSpeculateOrder::continueAction()
+{
+	if(isInMarket(mFirstInsStatus)){
+		mTempOrderLabel = "";
+		char temStatus = mFirstInsStatus;
+		mFirstInsStatus = USTP_FTDC_OS_CANCEL_SUBMIT;
+		QString orderRef = mReqMap[mFirstReqestId];
+		submitAction(orderRef, mInstrumentId);
+	}else if(USTP_FTDC_OS_ORDER_NO_ORDER == mFirstInsStatus || USTP_FTDC_OS_ORDER_ERROR == mFirstInsStatus || THOST_FTDC_OST_Canceled == mFirstInsStatus){
+			QString szRequestId = QString::number(mFirstReqestId);
+			emit onUpdateOrderShow(mOrderLabel, szRequestId, mInstrumentId, THOST_FTDC_OST_Canceled, mBS, mOrderQty, mOrderQty, 0, mOffsetFlag, 
 				THOST_FTDC_OPT_LimitPrice, THOST_FTDC_HF_Speculation, mOrderPrice);
 			emit onOrderFinished(mOrderLabel, mInstrumentId);
 			mFirstInsStatus = USTP_FTDC_OS_ORDER_NO_ORDER;
-		}
-		QString data = mOrderLabel + tr("  [DoDelOrder] mFirstInsStatus: ") + QString(mFirstInsStatus);
-		USTPLogger::saveData(data);
 	}
+	QString data = mOrderLabel + tr("  [DoDelContinueOrder] mFirstInsStatus: ") + QString(mFirstInsStatus);
+	USTPLogger::saveData(data);
 }
 
 void USTPSpeculateOrder::submitAction(const QString& orderRef, const QString& instrumentId)
 {	
-	USTPTradeApi::reqOrderAction(USTPMutexId::getMutexId(), mBrokerId, mUserId, mInvestorId, instrumentId, orderRef, mFrontId, mSessionId);
+	int reqestId = USTPMutexId::getMutexId();
+	USTPTradeApi::reqOrderAction(reqestId, mBrokerId, mUserId, mInvestorId, instrumentId, orderRef, mFrontId, mSessionId);
+	mReqMap.insert(reqestId, orderRef);
 #ifdef _DEBUG
 	QString data = mOrderLabel + tr("  [OrderAction] OrderRef: ") + orderRef + tr("  InstrumentId: ") + instrumentId;
 	USTPLogger::saveData(data);
 #endif	
+}
+
+void USTPSpeculateOrder::doUSTPParkedOrderInsert(const QString& parkedOrderId, const QString& orderRef, const QString& instrumentId, const char& direction, const double& orderPrice, const int& orderVolume,
+												 const int& remainVolume, const int& tradeVolume, const char& offsetFlag, const char& priceType, const char& hedgeFlag, const char& orderStatus,
+												 const QString& brokerId, const QString& exchangeId, const QString& investorId, const QString& orderSysId, const QString& statusMsg, const char& timeCondition, 
+												 const int& errorId,  const int& reqId)
+
+{
+	if(mReqMap.find(reqId) == mReqMap.end())
+		return;
+	QString szRequestId = QString::number(reqId);
+	mParkedOrderMap.insert(parkedOrderId, szRequestId);
+	char state = orderStatus;
+	switch (orderStatus)
+	{
+	case THOST_FTDC_PAOS_NotSend:
+		state = 'R';
+		break;
+	case THOST_FTDC_PAOS_Send:
+		state = 'X';
+		break;
+	}
+	if(errorId == 44)
+		state = 'K';
+	emit onUpdateOrderShow(mOrderLabel, szRequestId, instrumentId, state, direction, orderVolume, remainVolume, tradeVolume, offsetFlag, priceType, hedgeFlag, orderPrice);
+	if(mFirstReqestId == reqId){
+		mFirstInsParkedStatus = orderStatus;
+		mRemainQty = remainVolume;
+		if (THOST_FTDC_PAOS_Deleted == orderStatus){
+			USTPMutexId::updateActionNum(instrumentId);
+			emit onOrderFinished(mOrderLabel, mInstrumentId);
+			if(mTempOrderLabel == "")
+				return;
+			mOrderLabel = mTempOrderLabel;
+			mInstrumentId = mTempFirstIns;
+			mOrderPrice = mTempOrderPrice;
+			mBS = mTempBS;
+			mOrderQty = mTempOrderQty;
+			mOffsetFlag = mTempOffsetFlag;
+			submitParkedOrder(mInstrumentId, mOrderPrice, mBS, mRemainQty, THOST_FTDC_OPT_LimitPrice, THOST_FTDC_TC_GFD);
+		}
+	}
+}
+
+void USTPSpeculateOrder::doUSTPParkedOrderAction(const QString& parkedOrderActionId, const QString& orderActionRef, const QString& instrumentId, const double& orderPrice, const char& orderStatus,
+												 const QString& brokerId, const QString& exchangeId, const QString& investorId, const QString& orderRef, const QString& statusMsg, const int& errorId, 
+												 const int& reqId)
+{
+	if(mReqMap.find(reqId) == mReqMap.end())
+		return;
+	char state = orderStatus;
+	switch (orderStatus)
+	{
+	case THOST_FTDC_PAOS_NotSend:
+		state = 'R';
+		break;
+	case THOST_FTDC_PAOS_Send:
+		state = 'X';
+		break;
+	}
+	if(reqId == 9)
+		state = 'H';
+	QString szRequestId = QString::number(reqId);
+	emit onUpdateOrderShow(mOrderLabel, szRequestId, instrumentId, state, '2', 0, 0, 0, '5', '0', '0', 0.0);
+	if(mFirstReqestId == reqId){
+		mFirstInsParkedStatus = orderStatus;
+		if (THOST_FTDC_PAOS_Deleted == orderStatus){
+			USTPMutexId::updateActionNum(instrumentId);
+			emit onOrderFinished(mOrderLabel, mInstrumentId);
+			if(mTempOrderLabel == "")
+				return;
+			mOrderLabel = mTempOrderLabel;
+			mInstrumentId = mTempFirstIns;
+			mOrderPrice = mTempOrderPrice;
+			mBS = mTempBS;
+			mOrderQty = mTempOrderQty;
+			mOffsetFlag = mTempOffsetFlag;
+			submitParkedOrder(mInstrumentId, mOrderPrice, mBS, mRemainQty, THOST_FTDC_OPT_LimitPrice, THOST_FTDC_TC_GFD);
+		}
+	}
 }
 
 
@@ -400,10 +653,10 @@ void USTPUnilateralOrder::orderInsert(const int& reqId, const QString& instrumen
 	QString orderRef;
 	mFirstInsStatus = USTP_FTDC_OS_ORDER_SUBMIT;
 	USTPTradeApi::reqOrderInsert(reqId, orderRef, mBrokerId, mUserId, mInvestorId, instrumentId, priceType, timeCondition, adjustPrice, qty, direction, mOffsetFlag, THOST_FTDC_HF_Speculation, THOST_FTDC_VC_AV);
-	mFirstOrderRef = orderRef;
+	mFirstReqestId = reqId;
 	mOrderBasePrice = adjustPrice;
 	QString szReqId = QString::number(reqId);
-	mReqMap.insert(orderRef, szReqId);
+	mReqMap.insert(reqId, szReqId);
 	emit onUpdateOrderShow(mOrderLabel, szReqId, instrumentId, 'N', direction, qty, qty, 0, mOffsetFlag, priceType, THOST_FTDC_HF_Speculation, orderPrice);
 #ifdef _DEBUG
 	QString data = mOrderLabel + tr("  [OrderInsert] Instrument: ") + instrumentId +  tr("  RequestId: ") + szReqId + tr("  OrderRef: ") + orderRef + 
@@ -417,10 +670,11 @@ void USTPUnilateralOrder::doUSTPRtnOrder(const QString& localId, const QString& 
 											 const int& remainVolume, const int& tradeVolume, const char& offsetFlag, const char& priceType, const char& hedgeFlag, const char& orderStatus,
 											 const QString& brokerId, const QString& exchangeId, const QString& investorId, const QString& orderSysId, const QString& statusMsg, const char& timeCondition, const int& reqId)
 {	
-	if(mReqMap.find(orderRef) == mReqMap.end())
+	if(mReqMap.find(reqId) == mReqMap.end())
 		return;
-	emit onUpdateOrderShow(mOrderLabel, mReqMap[orderRef], instrumentId, orderStatus, direction, orderVolume, remainVolume, tradeVolume, offsetFlag, priceType, hedgeFlag, orderPrice);
-	if(mFirstOrderRef == orderRef){
+	QString szReqId = QString::number(reqId);
+	emit onUpdateOrderShow(mOrderLabel, szReqId, instrumentId, orderStatus, direction, orderVolume, remainVolume, tradeVolume, offsetFlag, priceType, hedgeFlag, orderPrice);
+	if(mFirstReqestId == reqId){
 		mFirstInsStatus = orderStatus;
 		mRemainQty = remainVolume;
 		if (THOST_FTDC_OST_Canceled == orderStatus){
@@ -458,32 +712,34 @@ void USTPUnilateralOrder::doUSTPErrRtnOrderInsert(const QString& userId, const Q
 													  const QString& instrumentId, const QString& investorId, const char& offsetFlag, const char& priceType, const char& timeCondition,
 													  const QString& orderRef, const double& orderPrice, const int& volume, const int& errorId, const QString& errorMsg, const int& reqId)
 {	
-	if(mReqMap.find(orderRef) == mReqMap.end())
+	if(mReqMap.find(reqId) == mReqMap.end())
 		return;
 
 	if(mInstrumentId == instrumentId)
 		mFirstInsStatus = USTP_FTDC_OS_ORDER_ERROR;
 
+	QString szReqId = QString::number(reqId);
+
 	switch (errorId){
 	case 22:
-		emit onUpdateOrderShow(mOrderLabel, mReqMap[orderRef], instrumentId, 'D', direction, volume, volume, 0, offsetFlag, priceType, hedgeFlag, mOrderPrice); //重复的报单
+		emit onUpdateOrderShow(mOrderLabel, szReqId, instrumentId, 'D', direction, volume, volume, 0, offsetFlag, priceType, hedgeFlag, orderPrice); //重复的报单
 		break;
 	case 31:
-		emit onUpdateOrderShow(mOrderLabel, mReqMap[orderRef], instrumentId, 'Z', direction, volume, volume, 0, offsetFlag, priceType, hedgeFlag, mOrderPrice);	//	资金不足
+		emit onUpdateOrderShow(mOrderLabel, szReqId, instrumentId, 'Z', direction, volume, volume, 0, offsetFlag, priceType, hedgeFlag, orderPrice);	//	资金不足
 		break;
 	case 42:
-		emit onUpdateOrderShow(mOrderLabel, mReqMap[orderRef], instrumentId, 'S', direction, volume, volume, 0, offsetFlag, priceType, hedgeFlag, mOrderPrice);	//	结算结果未确认
+		emit onUpdateOrderShow(mOrderLabel, szReqId, instrumentId, 'S', direction, volume, volume, 0, offsetFlag, priceType, hedgeFlag, orderPrice);	//	结算结果未确认
 		break;
 	case 50:
 	case 51:
-		emit onUpdateOrderShow(mOrderLabel, mReqMap[orderRef], instrumentId, 'P', direction, volume, volume, 0, offsetFlag, priceType, hedgeFlag, mOrderPrice);	//平仓位不足
+		emit onUpdateOrderShow(mOrderLabel, szReqId, instrumentId, 'P', direction, volume, volume, 0, offsetFlag, priceType, hedgeFlag, orderPrice);	//平仓位不足
 		break;
 	default:
-		emit onUpdateOrderShow(mOrderLabel, mReqMap[orderRef], instrumentId, 'W', direction, volume, volume, 0, offsetFlag, priceType, hedgeFlag, mOrderPrice);
+		emit onUpdateOrderShow(mOrderLabel, szReqId, instrumentId, 'W', direction, volume, volume, 0, offsetFlag, priceType, hedgeFlag, orderPrice);
 		break;
 	}
 #ifdef _DEBUG
-	QString data = mOrderLabel + tr("  [ErrRtnOrderInsert] orderRef: ") + orderRef + tr("  RequestId: ") + mReqMap[orderRef] + tr("  InstrumentId: ") + instrumentId + 
+	QString data = mOrderLabel + tr("  [ErrRtnOrderInsert] orderRef: ") + orderRef + tr("  RequestId: ") + szReqId + tr("  InstrumentId: ") + instrumentId + 
 		tr("  ErrorId: ") + QString::number(errorId) + tr("  ErrorMsg: ") + errorMsg;
 	USTPLogger::saveData(data);
 #endif
@@ -494,7 +750,7 @@ void USTPUnilateralOrder::doUSTPErrRtnOrderAction(const char& actionFlag, const 
 													  const int& volumeChange, const int& errorId, const QString& errorMsg, const int& reqId)
 {
 #ifdef _DEBUG
-	if(mReqMap.find(orderActionRef) == mReqMap.end())
+	if(mReqMap.find(reqId) == mReqMap.end())
 		return;
 	QString data = mOrderLabel + tr("  [ErrRtnOrderAction] orderSysId: ") + orderSysId + tr("  UserActionLocalId: ") + userActionLocalId  + tr("  ErrorId: ") + 
 		QString::number(errorId) + tr("  ErrorMsg: ") + errorMsg;
@@ -509,9 +765,11 @@ void USTPUnilateralOrder::doDelOrder(const QString& orderLabel)
 		mIsDeleted = true;
 		if(isInMarket(mFirstInsStatus)){
 			mFirstInsStatus = USTP_FTDC_OS_CANCEL_SUBMIT;
-			submitAction(mFirstOrderRef, mInstrumentId);
+			QString orderRef = mReqMap[mFirstReqestId];
+			submitAction(orderRef, mInstrumentId);
 		}else if(USTP_FTDC_OS_ORDER_NO_ORDER == mFirstInsStatus || USTP_FTDC_OS_ORDER_ERROR == mFirstInsStatus || THOST_FTDC_OST_Canceled == mFirstInsStatus){
-			emit onUpdateOrderShow(mOrderLabel, mReqMap[mFirstOrderRef], mInstrumentId, THOST_FTDC_OST_Canceled, mBS, mOrderQty, mOrderQty, 0, mOffsetFlag, 
+			QString szRequestId = QString::number(mFirstReqestId);
+			emit onUpdateOrderShow(mOrderLabel, szRequestId, mInstrumentId, THOST_FTDC_OST_Canceled, mBS, mOrderQty, mOrderQty, 0, mOffsetFlag, 
 				THOST_FTDC_OPT_LimitPrice, THOST_FTDC_HF_Speculation, mOpenOrderPrice);
 			emit onOrderFinished(mOrderLabel, mInstrumentId);
 		}
@@ -523,12 +781,15 @@ void USTPUnilateralOrder::doDelOrder(const QString& orderLabel)
 void USTPUnilateralOrder::cancelFirstIns()
 {
 	mFirstInsStatus = USTP_FTDC_OS_CANCEL_SUBMIT;
-	submitAction(mFirstOrderRef, mInstrumentId);
+	QString orderRef = mReqMap[mFirstReqestId];
+	submitAction(orderRef, mInstrumentId);
 }
 
 void USTPUnilateralOrder::submitAction(const QString& orderRef, const QString& instrumentId)
 {	
-	USTPTradeApi::reqOrderAction(USTPMutexId::getMutexId(), mBrokerId, mUserId, mInvestorId, instrumentId, orderRef, mFrontId, mSessionId);
+	int reqestId = USTPMutexId::getMutexId();
+	USTPTradeApi::reqOrderAction(reqestId, mBrokerId, mUserId, mInvestorId, instrumentId, orderRef, mFrontId, mSessionId);
+	mReqMap.insert(reqestId, orderRef);
 #ifdef _DEBUG
 	QString data = mOrderLabel + tr("  [OrderAction] OrderRef: ") + orderRef + tr("  InstrumentId: ") + instrumentId;
 	USTPLogger::saveData(data);

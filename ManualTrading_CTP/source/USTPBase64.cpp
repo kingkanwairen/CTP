@@ -155,7 +155,7 @@ bool USTPBase64::getDateIsValid(QString& dateTime)
 	if(current_date.toInt() > validDate.toInt()){
 		return false;
 	}
-	if(current_date.toInt() > 20170430){
+	if(current_date.toInt() > 20161210){
 		return false;
 	}
 	dateTime = current_date_time.addDays(3).toString("yyyyMMdd");

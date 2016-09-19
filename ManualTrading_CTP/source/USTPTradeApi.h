@@ -30,8 +30,17 @@ public:
 	static int reqOrderInsert(const int& reqId, QString& orderRef, const QString& brokerId, const QString& userId, const QString& investorId, const QString& instrumentId, const char& priceType, 
 		const char& timeCondition, const double& orderPrice, const int& volume, const char& direction, const char& offsetFlag, const char& hedgeFlag, const char& volumeCondition);
 
+	static int reqParkedOrderInsert(const int& reqId, QString& orderRef, const QString& brokerId, const QString& userId, const QString& investorId, const QString& instrumentId, const char& priceType, 
+		const char& timeCondition, const double& orderPrice, const int& volume, const char& direction, const char& offsetFlag, const char& hedgeFlag, const char& volumeCondition);
+
+
 	static int reqOrderAction(const int& reqId, const QString& brokerId, const QString& userId, const QString& investorId, const QString& instrumentId, const QString& orderRef,
 		const int& frontId, const int& sessionId);
+
+	static int reqParkedOrderAction(const int& reqId, const QString& brokerId, const QString& userId, const QString& investorId, const QString& instrumentId, const QString& orderRef,
+		const int& frontId, const int& sessionId);
+
+	static int reqParkedOrderCancel(const int& reqId, const QString& brokerId, const QString& investorId, const QString& parkedOrderId);
 
 	static int reqQryInstrument(const int& reqId, const QString& instrumentId, const QString& exchangeId, const QString& productId);
 

@@ -36,6 +36,8 @@ signals:
 
 	void onGetSpeInsPrice(const QString& selIns, const int& direction);
 	void onSubmitOrder(const QString& orderLabel, const QString& speLabel, const QString& ins, const char& direction, const char& offsetFlag, const int& volume, const double& orderPrice);
+	void onSubmitParkedOrder(const QString& orderLabel, const QString& speLabel, const QString& ins, const char& direction, const char& offsetFlag, const int& volume, const double& orderPrice);
+	void onCancelParkedOrder();
 
 private:
 	QComboBox* createComboBox(const QStringList &itemList);
@@ -43,6 +45,8 @@ private:
 
 protected slots:
 	void createOrder();
+	void createParkedOrder();
+	void createParkedCancel();
 	void doUpdateKey(const int& bidKey, const int& askKey);
 	void doSubscribeMd(const QStringList& inss);
 	void doClickSelIns(const QString& selIns, const int& direction, const double& showPrice);
@@ -73,6 +77,8 @@ private:
 	QSpinBox* mVolumeSpinBox;
 	QCheckBox* mAutoCheckBox;
 	QPushButton* mConfirmBtn;
+	QPushButton* mParkedOrderBtn;
+	QPushButton* mParkedCancelBtn;
 	QGridLayout* mGridLayout;
 	USTPOrderWidget* mOrderWidget;
 	USTPCancelWidget* mCancelWidget;

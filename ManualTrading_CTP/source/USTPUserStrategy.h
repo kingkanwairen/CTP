@@ -23,6 +23,8 @@ protected:
 
 	virtual bool isInMarket(const char& status);
 
+	virtual bool isInParkedMarket(const char& status);
+
 	virtual void submitAction(const QString& orderRef, const QString& instrumentId){};
 
 	virtual void submitOrder(const QString& instrumentId, const double& orderPrice, const char& direction, const int& qty, const char& priceType, const char& timeCondition){};
@@ -39,8 +41,9 @@ protected:
 	QString mBrokerId;
 	QString mUserId;
 	QString mInvestorId;
-
-	QString mFirstOrderRef;
+	QString mOrderSysId;
+	QString mActionExh;
+	
 	QString mExh;
 	
 	double mPriceTick;
@@ -58,11 +61,14 @@ protected:
 	int mFrontId;
 	int mSessionId;
 	int mInsPrecision;
+	int mFirstReqestId;
 		
 	char mBS;
 	char mOffsetFlag;
 	char mFirstInsStatus;
-	QMap<QString, QString> mReqMap;
+	char mFirstInsParkedStatus;
+	QMap<int, QString> mReqMap;
+	QMap<QString, QString> mParkedOrderMap;
 private:
 };
 
@@ -86,6 +92,8 @@ signals:
 
 	protected slots:
 		void doSubmitOrder(const QString& orderLabel, const QString& speLabel, const QString& ins, const char& direction, const char& offsetFlag, const int& volume, const double& orderPrice);
+		
+		void doSubmitParkedOrder(const QString& orderLabel, const QString& speLabel, const QString& ins, const char& direction, const char& offsetFlag, const int& volume, const double& orderPrice);
 
 		void doUSTPRtnOrder(const QString& localId, const QString& orderRef, const QString& instrumentId, const char& direction, const double& orderPrice, const int& orderVolume,
 			const int& remainVolume, const int& tradeVolume, const char& offsetFlag, const char& priceType, const char& hedgeFlag, const char& orderStatus,
@@ -99,7 +107,19 @@ signals:
 			const QString& orderSysId, const QString& userActionLocalId, const QString& orderActionRef, const double& orderPrice, 
 			const int& volumeChange, const int& errorId, const QString& errorMsg, const int& reqId);
 
+		void doUSTPRemoveParkedOrder(const QString& brokerId, const QString& userId, const QString& parkedOrderId);
+
+		void doUSTPParkedOrderInsert(const QString& parkedOrderId, const QString& orderRef, const QString& instrumentId, const char& direction, const double& orderPrice, const int& orderVolume,
+			const int& remainVolume, const int& tradeVolume, const char& offsetFlag, const char& priceType, const char& hedgeFlag, const char& orderStatus,
+			const QString& brokerId, const QString& exchangeId, const QString& investorId, const QString& orderSysId, const QString& statusMsg, const char& timeCondition, const int& errorId,  const int& reqId);	
+
+		void doUSTPParkedOrderAction(const QString& parkedOrderActionId, const QString& orderActionRef, const QString& instrumentId, const double& orderPrice, const char& orderStatus,
+			const QString& brokerId, const QString& exchangeId, const QString& investorId, const QString& orderRef, const QString& statusMsg, const int& errorId,  const int& reqId);
+
+
 		void doDelOrder(const QString& orderLabel);
+
+		void doCancelParkedOrder();
 
 protected:
 
@@ -109,9 +129,18 @@ protected:
 
 	virtual void orderInsert(const int& reqId, const QString& instrumentId, const double& orderPrice, const char& direction, const int& qty, const char& priceType, const char& timeCondition);
 
+	virtual void submitParkedAction(const QString& orderRef, const QString& instrumentId);
+
+	virtual void submitParkedOrder(const QString& instrumentId, const double& orderPrice, const char& direction, const int& qty, const char& priceType, const char& timeCondition);
+
+	virtual void submitParkedCancel(const QString& parkedOrderId);
 private:
 
 	void initConnect(USTPSubmitWidget* pSubmitWidget, USTPOrderWidget* pOrderWidget, USTPCancelWidget* pCancelWidget);
+
+	void parkedAction();
+
+	void continueAction();
 
 private:
 	QString mTempOrderLabel;
@@ -121,6 +150,7 @@ private:
 	int mTempOrderQty;
 	double mTempOrderPrice;
 	QString mSpeOrderLabel;
+	bool mIsParkedOrder;
 };
 
 class USTPUnilateralOrder : public USTPStrategyBase

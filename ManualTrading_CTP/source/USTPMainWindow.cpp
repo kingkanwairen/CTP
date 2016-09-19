@@ -68,7 +68,7 @@ USTPMainWindow::USTPMainWindow(QWidget * parent)
 
 	QDesktopWidget *pDesk = QApplication::desktop();
 	resize(pDesk->width() / 2, pDesk->height());
-	move(0, 0);
+	move(pDesk->width() / 4, 0);
 	doQryInvestorPosition();
 }
 
@@ -260,8 +260,8 @@ QDockWidget* USTPMainWindow::createDockWidget(const QString& title, QWidget* pWi
 
 void USTPMainWindow::about()
 {
-	QMessageBox::about(this, tr("关于 套利交易系统"),
-		tr("<h4>期货K系统</h4>版权所有(C) King  2015-2016"));
+	QMessageBox::about(this, tr("关于 CTP快速交易系统"),
+		tr("<h4>CTP快速交易系统</h4>版权所有(C) King  2015-2016"));
 }
 
 

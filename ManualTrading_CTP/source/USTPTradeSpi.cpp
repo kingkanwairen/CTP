@@ -91,7 +91,9 @@ void USTPTradeSpi::OnRtnOrder(CThostFtdcOrderField *pOrder)
 #ifdef _DEBUG
 		QString data = QString(tr("[OnRtnOrder]  InvestorId: ")) + QString(pOrder->InvestorID) + tr("  OrderRef: ") + QString(pOrder->OrderRef)
 			+ tr("  InstrumentId: ") + QString(pOrder->InstrumentID) + tr("  Direction: ") + QString(pOrder->Direction) + tr("  OrderPrice: ") + 
-			QString::number(pOrder->LimitPrice) + tr("  OrderStatus: ") + QString(pOrder->OrderStatus) + tr("  OrderSysID: ") + QString(pOrder->OrderSysID);
+			QString::number(pOrder->LimitPrice) + tr("  OrderStatus: ") + QString(pOrder->OrderStatus) + tr("  OrderSysID: ") + QString(pOrder->OrderSysID) +
+			tr("  OrderLocalId: ") + QString(pOrder->OrderLocalID) + tr("  ContingentCondition: ") + QString(pOrder->ContingentCondition) + 
+			tr("  RequestId: ") + QString::number(pOrder->RequestID);
 		USTPLogger::saveData(data);
 #endif
 	}
@@ -177,5 +179,55 @@ void USTPTradeSpi::OnRspQryTrade(CThostFtdcTradeField *pTrade, CThostFtdcRspInfo
 #endif
 	}
 }
+
+
+void USTPTradeSpi:: OnRspParkedOrderInsert(CThostFtdcParkedOrderField *pParkedOrder, CThostFtdcRspInfoField *pRspInfo, int nRequestID, bool bIsLast)
+{
+	if (pParkedOrder != NULL && pRspInfo != NULL){
+		emit onUSTPParkedOrderInsert(QString(pParkedOrder->ParkedOrderID), QString(pParkedOrder->OrderRef), QString(pParkedOrder->InstrumentID), pParkedOrder->Direction, pParkedOrder->LimitPrice, pParkedOrder->VolumeTotalOriginal,
+			pParkedOrder->VolumeTotalOriginal, 0, pParkedOrder->CombOffsetFlag[0], pParkedOrder->OrderPriceType, pParkedOrder->CombHedgeFlag[0], pParkedOrder->Status,
+			QString(pParkedOrder->BrokerID), QString(pParkedOrder->ExchangeID), QString(pParkedOrder->InvestorID), QString(""), QString(pParkedOrder->ErrorMsg), 
+			pParkedOrder->TimeCondition, pRspInfo->ErrorID, pParkedOrder->RequestID);
+
+#ifdef _DEBUG
+		QString data = QString(tr("[OnRspParkedOrderInsert]  InvestorId: ")) + QString(pParkedOrder->InvestorID) + tr("  OrderRef: ") + QString(pParkedOrder->OrderRef)
+			+ tr("  InstrumentId: ") + QString(pParkedOrder->InstrumentID) + tr("  Direction: ") + QString(pParkedOrder->Direction) + tr("  OrderPrice: ") + 
+			QString::number(pParkedOrder->LimitPrice) + tr("  OrderVolume: ") + QString::number(pParkedOrder->VolumeTotalOriginal) + tr("  ErrorMsg: ") +  QString::fromLocal8Bit(pParkedOrder->ErrorMsg) +
+			tr("  Status: ") + QString(pParkedOrder->Status) + tr("  ContingentCondition: ") + QString(pParkedOrder->ContingentCondition) + tr("  ErrID: ") + QString::number(pRspInfo->ErrorID) + 
+			tr("  Msg: ") + QString(pRspInfo->ErrorMsg) + tr("  parkedOrderId: ") + QString(pParkedOrder->ParkedOrderID) + tr("  RequestId: ") +  QString::number(pParkedOrder->RequestID);
+		USTPLogger::saveData(data);
+#endif
+	}
+}
+
+void USTPTradeSpi::OnRspParkedOrderAction(CThostFtdcParkedOrderActionField *pParkedOrderAction, CThostFtdcRspInfoField *pRspInfo, int nRequestID, bool bIsLast)
+{
+	if (pParkedOrderAction != NULL && pRspInfo != NULL){
+		emit onUSTPParkedOrderAction(QString(pParkedOrderAction->ParkedOrderActionID), QString(pParkedOrderAction->OrderActionRef), QString(pParkedOrderAction->InstrumentID),  pParkedOrderAction->LimitPrice, pParkedOrderAction->Status, 
+			QString(pParkedOrderAction->BrokerID), QString(pParkedOrderAction->ExchangeID), QString(pParkedOrderAction->InvestorID), QString(pParkedOrderAction->OrderRef), QString(pParkedOrderAction->ErrorMsg), pRspInfo->ErrorID,
+			pParkedOrderAction->RequestID);
+
+#ifdef _DEBUG
+		QString data = QString(tr("[OnRspParkedOrderAction]  InvestorId: ")) + QString(pParkedOrderAction->InvestorID) + tr("  OrderSysID: ") + QString(pParkedOrderAction->OrderSysID)
+			+ tr("  ParkedOrderActionId: ") + QString(pParkedOrderAction->ParkedOrderActionID) + tr("  OrderRef: ") + QString(pParkedOrderAction->OrderRef) + tr("  ErrorMsg: ") + 
+			QString::fromLocal8Bit(pRspInfo->ErrorMsg) + tr("  Status: ") + QString(pParkedOrderAction->Status) + tr("  OrderActionRef: ") + QString(pParkedOrderAction->OrderActionRef) + 
+			tr("  ErrID: ") + QString::number(pRspInfo->ErrorID);
+		USTPLogger::saveData(data);
+#endif
+	}
+}
+
+void USTPTradeSpi::OnRspRemoveParkedOrder(CThostFtdcRemoveParkedOrderField *pRemoveParkedOrder, CThostFtdcRspInfoField *pRspInfo, int nRequestID, bool bIsLast)
+{
+	if (pRemoveParkedOrder != NULL && pRspInfo != NULL){
+		emit onUSTPRemoveParkedOrder(pRemoveParkedOrder->BrokerID, QString(pRemoveParkedOrder->InvestorID), QString(pRemoveParkedOrder->ParkedOrderID));
+#ifdef _DEBUG
+		QString data = QString(tr("[OnRspRemoveParkedOrder]  InvestorId: ")) + QString(pRemoveParkedOrder->InvestorID) + tr("  BrokerId: ") + QString(pRemoveParkedOrder->BrokerID)
+			+ tr("  RemoveParkedOrder: ") + QString(pRemoveParkedOrder->ParkedOrderID) + tr("  ErrorMsg: ") + QString::fromLocal8Bit(pRspInfo->ErrorMsg);
+		USTPLogger::saveData(data);
+#endif
+	}
+}
+
 
 #include "moc_USTPTradeSpi.cpp"
